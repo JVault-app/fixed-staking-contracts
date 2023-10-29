@@ -1,0 +1,9 @@
+int exc::incorrect_sender_address() asm "0x191 PUSHINT";
+int exc::not_enough_ton_for_gas() asm "0x192 PUSHINT";
+int exc::not_enough_ton_for_fees() asm "0x193 PUSHINT";
+int exc::incorrect_jetton() asm "0x194 PUSHINT";
+int exc::incorrect_nft() asm "0x195 PUSHINT";
+int exc::incorrect_lock_period() asm "0x196 PUSHINT";
+int exc::no_rewards_left() asm "0x197 PUSHINT";
+
+int exc::unsupported_op() asm "0xffff PUSHINT";
