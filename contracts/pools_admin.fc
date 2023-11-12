@@ -52,7 +52,7 @@ const int tons_for_notification = 5000000;
                 .store_uint(1, 1)
                 .store_ref(
                     begin_cell()
-                        .store_uint(op::transfer_jetton(), 32)
+                        .store_uint(op::transfer_jetton, 32)
                         .store_uint(query_id, 64)
                         .store_coins(jetton_amount)
                         .store_slice(to_address)
@@ -100,8 +100,8 @@ const int tons_for_notification = 5000000;
     (cell nft_item_code, int creation_fee) = (other_data~load_ref(), other_data~load_coins());
 
     if (op == 1) {  ;; deploy new pool
-        throw_unless(exc::not_enough_ton_for_fees(),
-                    msg_value > creation_fee + gas_for_deploy);
+        throw_unless(exc::not_enough_ton_for_fees,
+                     msg_value > creation_fee + gas_for_deploy);
 
         cell data = begin_cell()
                         .store_uint(0, 64)
@@ -135,7 +135,7 @@ const int tons_for_notification = 5000000;
                         .store_slice(sender_address)
                         .store_coins(msg_value - gas_for_deploy - creation_fee)
                         .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-                        .store_uint(op::excesses(), 32)
+                        .store_uint(op::excesses, 32)
                         .store_uint(query_id, 64);
         send_raw_message(msg.end_cell(), 0);
         
@@ -150,29 +150,29 @@ const int tons_for_notification = 5000000;
         return ();
     }
 
-    if ((op == op::excesses()) | (op == op::transfer_notification())) {
+    if ((op == op::excesses) | (op == op::transfer_notification)) {
         return ();
     }
 
     (slice owner_address_1, slice owner_address_2) = (other_data~load_msg_addr(), other_data~load_msg_addr());
-    throw_unless(exc::incorrect_sender_address(), equal_slices(sender_address, owner_address_1));
+    throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, owner_address_1));
 
     if (op == 2) {  ;; harvest royalty from staking pool
-        throw_unless(exc::not_enough_ton_for_gas(), msg_value > gas_for_jetton_transfer);
+        throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer);
         slice pool_address = in_msg_body~load_msg_addr();
         builder msg = begin_cell()
                 .store_uint(0x18, 6)
                 .store_slice(pool_address)
                 .store_coins(0)
                 .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-                .store_uint(op::withdraw_fees(), 32)
+                .store_uint(op::withdraw_fees, 32)
                 .store_uint(query_id, 64); 
         send_raw_message(msg.end_cell(), 64);
         return ();
     }
 
     if (op == 3) {  ;; withdraw jetton
-        throw_unless(exc::not_enough_ton_for_gas(), msg_value > gas_for_jetton_transfer * 2);
+        throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer * 2);
         slice jetton_wallet_address = in_msg_body~load_msg_addr();
         int jetton_amount = in_msg_body~load_coins() / 2;
         send_jettons(query_id, jetton_amount, owner_address_1, 
@@ -183,7 +183,7 @@ const int tons_for_notification = 5000000;
     }
 
     if (op == 4) {  ;; withdraw ton
-        int msg_value = (my_balance - min_tons_for_storage) / 2;
+        int msg_value = (my_balance - min_tons_for_storage);
         if (msg_value < min_withdrawable_amount) {
             return ();
         }
@@ -193,25 +193,25 @@ const int tons_for_notification = 5000000;
                         .store_coins(msg_value)
                         .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
         send_raw_message(msg.end_cell(), 0); 
-        builder msg2 = begin_cell()
-                        .store_uint(0x10, 6)
-                        .store_slice(owner_address_2)
-                        .store_coins(msg_value)
-                        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
-        send_raw_message(msg2.end_cell(), 0); 
+        ;; builder msg2 = begin_cell()
+        ;;                 .store_uint(0x10, 6)
+        ;;                 .store_slice(owner_address_2)
+        ;;                 .store_coins(msg_value)
+        ;;                 .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+        ;; send_raw_message(msg2.end_cell(), 0); 
         return ();
     }
 
     ;; change something
     if (op == 10) {  ;; change creation fee
-        throw_unless(exc::not_enough_ton_for_fees(), msg_value > tons_for_notification);
+        throw_unless(exc::not_enough_ton_for_fees, msg_value > tons_for_notification);
         notify_owner(owner_address_1, tons_for_notification, "Creation fee was changed");
         save_all_data(all_pools, staking_pool_code, nft_item_code, in_msg_body~load_coins(), owner_address_1, owner_address_2);
 
         return ();
     }
     if (op == 11) {  ;; change staking_pool_code and nft_item_code
-        throw_unless(exc::not_enough_ton_for_fees(), msg_value > tons_for_notification);
+        throw_unless(exc::not_enough_ton_for_fees, msg_value > tons_for_notification);
         notify_owner(owner_address_1, tons_for_notification, "Staking smc code was changed");
         save_all_data(all_pools, in_msg_body~load_ref(), in_msg_body~load_ref(), creation_fee, owner_address_1, owner_address_2);
 
@@ -228,7 +228,7 @@ const int tons_for_notification = 5000000;
         return ();
     }
 
-    throw(exc::unsupported_op());
+    throw(exc::unsupported_op);
 }
 
 

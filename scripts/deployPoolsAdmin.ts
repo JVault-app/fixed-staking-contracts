@@ -6,7 +6,7 @@ export async function run(provider: NetworkProvider) {
     const poolsAdmin = provider.open(PoolsAdmin.createFromConfig({
         stakingPoolCode: await compile("LockupNftCollection"),
         nftItemCode: await compile('NftItem'),
-        creationFee: 100000000n,
+        creationFee: 10000000000n,  // 10 TON
         ownerAddress1: Address.parse("EQCovSj8c8Ik1I-RZt7dbIOEulYe-MfJ2SN5eMhxwfACvsM0") as Address,
         ownerAddress2: Address.parse("UQC228vvLVzjK4t7CUfRhlQuxJqfB5sJzAZNEilvbpY6CzZk") as Address
     }, await compile('PoolsAdmin')));
