@@ -206,24 +206,24 @@ const int tons_for_notification = 5000000;
     if (op == 10) {  ;; change creation fee
         throw_unless(exc::not_enough_ton_for_fees, msg_value > tons_for_notification);
         notify_owner(owner_address_1, tons_for_notification, "Creation fee was changed");
-        save_all_data(all_pools, staking_pool_code, nft_item_code, in_msg_body~load_coins(), owner_address_1, owner_address_2);
+        save_all_data(staking_pool_code, nft_item_code, all_pools, in_msg_body~load_coins(), owner_address_1, owner_address_2);
 
         return ();
     }
     if (op == 11) {  ;; change staking_pool_code and nft_item_code
         throw_unless(exc::not_enough_ton_for_fees, msg_value > tons_for_notification);
         notify_owner(owner_address_1, tons_for_notification, "Staking smc code was changed");
-        save_all_data(all_pools, in_msg_body~load_ref(), in_msg_body~load_ref(), creation_fee, owner_address_1, owner_address_2);
+        save_all_data(in_msg_body~load_ref(), in_msg_body~load_ref(), all_pools, creation_fee, owner_address_1, owner_address_2);
 
         return ();
     }
     if (op == 12) {  ;; change owner_address_1
-        save_all_data(all_pools, staking_pool_code, nft_item_code, creation_fee, in_msg_body~load_msg_addr(), owner_address_2);
+        save_all_data(staking_pool_code, nft_item_code, all_pools, creation_fee, in_msg_body~load_msg_addr(), owner_address_2);
 
         return ();
     }
     if (op == 13) {  ;; change owner_address_2
-        save_all_data(all_pools, staking_pool_code, nft_item_code, creation_fee, owner_address_1, in_msg_body~load_msg_addr());
+        save_all_data(staking_pool_code, nft_item_code, all_pools, creation_fee, owner_address_2, in_msg_body~load_msg_addr());
 
         return ();
     }
