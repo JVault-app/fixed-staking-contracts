@@ -223,7 +223,7 @@ const int tons_for_notification = 5000000;
         return ();
     }
     if (op == 13) {  ;; change owner_address_2
-        save_all_data(staking_pool_code, nft_item_code, all_pools, creation_fee, owner_address_2, in_msg_body~load_msg_addr());
+        save_all_data(staking_pool_code, nft_item_code, all_pools, creation_fee, owner_address_1, in_msg_body~load_msg_addr());
 
         return ();
     }
