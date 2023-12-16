@@ -14,8 +14,6 @@ const int op::burn = 0x55521d04;
 const int op::nft_transferred = 0x9cf42a7d;
 
 ;; NFT-collection
-const int op::change_owner = 0x3;
-;; const int op::change_jetton_wallet = 0x4;
 const int op::withdraw_fees = 0x5;
 const int op::get_info = 0x6;
-;; const int op::change_royalty_params = 0x;
+const int op::withdraw_rewards = 0x7;
