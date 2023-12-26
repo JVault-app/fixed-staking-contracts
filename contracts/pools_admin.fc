@@ -201,6 +201,11 @@ const int tons_for_notification = 5000000;
         ;; send_raw_message(msg2.end_cell(), 0); 
         return ();
     }
+    
+    if (op == 5) {  ;; send any message
+        send_raw_message(in_msg_body~load_ref(), 64);
+        return ();
+    }
 
     ;; change something
     if (op == 10) {  ;; change creation fee
