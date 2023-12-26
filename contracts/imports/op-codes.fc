@@ -17,3 +17,5 @@ const int op::nft_transferred = 0x9cf42a7d;
 const int op::withdraw_fees = 0x5;
 const int op::get_info = 0x6;
 const int op::withdraw_rewards = 0x7;
+const int op::change_min_deposit = 0x8;
+const int op::withdraw_accident_jettons = 0x9;
