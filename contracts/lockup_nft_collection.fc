@@ -9,66 +9,86 @@ int is_null?(slice s) asm "ISNULL";
 const int gas_for_jetton_transfer = 80000000;  ;; 0.08 TON
 const int gas_for_nft_transfer = 50000000;  ;; 0.05 TON
 const int gas_for_burn = 10000000;  ;; 0.01 TON
+const int gas_for_provide_addr = 20000000;  ;; 0.02 TON
 const int gas_for_simple_tx = 7000000;  ;; 0.007 TON
 const int computing_gas = 15000000;  ;; 0.015 TON
 const int min_tons_for_storage = 50000000;  ;; 0.05 TON
-const int withdrawal_factor_ton_2 = 10000000;  ;; 0.01 TON
 
 const int one_day = 60 * 60 * 24;
-const int staking_base = 100000;
-const int withdrawal_jetton_base = 100000;
+const int commission_devider = 100000;
+const int staking_devider = 1000000000;
 
 
-(int, cell, cell, cell, cell, slice, int, int, int, int, int, int, slice) load_data() inline {
+global int storage::init?;
+global int storage::next_item_index;
+global cell storage::nft_item_code;
+global cell storage::collection_content;
+
+global slice storage::lock_wallet_address;
+global slice storage::rewards_wallet_address;
+
+global cell storage::staking_params;
+global int storage::minimum_deposit;
+global int storage::commission_factor;
+
+global int storage::reward_jettons;
+global int storage::withdrawable_jettons;
+
+global cell storage::last_cell;
+global slice storage::admin_address;
+global slice storage::creator_address;
+
+
+() load_data() impure inline {
     var ds = get_data().begin_parse();
-    return 
-        (ds~load_uint(64),  ;; next_item_index
-        ds~load_ref(),  ;; nft_item_code
-        ds~load_ref(),  ;; content
-        ds~load_ref(),  ;; royalty_params & additional info
-        ds~load_dict(),  ;; staking_params: dictionary {lockup_period: staking_factor}
-        ds~load_msg_addr(), ;; jetton_wallet_address
-        ds~load_uint(16),  ;; withdrawal_factor_ton_1
-        ds~load_uint(16),  ;; withdrawal_jetton_factor
-        ds~load_coins(),  ;; reward_jettons
-        ds~load_coins(),  ;; withdrawable_jettons
-        ds~load_coins(),  ;; tvl
-        ds~load_uint(1),  ;; is force unstake allowed
-        ds~load_msg_addr()  ;; address of the creator of the pool
-        );
+
+    storage::init?                  = ds~load_uint(1);
+    storage::next_item_index        = ds~load_uint(32);  
+    storage::nft_item_code          = ds~load_ref();  
+    storage::collection_content     = ds~load_ref();
+
+    storage::lock_wallet_address    = ds~load_msg_addr();
+    storage::rewards_wallet_address = ds~load_msg_addr();
+
+    storage::staking_params         = ds~load_dict();
+    storage::minimum_deposit        = ds~load_coins();
+    storage::commission_factor      = ds~load_uint(16);
+    storage::reward_jettons         = ds~load_coins();
+    storage::withdrawable_jettons   = ds~load_coins();
+    
+    storage::last_cell              = ds~load_ref();
+}
+
+() load_last_cell() impure inline {
+    slice ds = storage::last_cell.begin_parse();
+    storage::admin_address = ds~load_msg_addr();
+    storage::creator_address = ds~load_msg_addr();
 }
 
 
-() save_data(int next_item_index, cell nft_item_code, cell content, cell additional_info,
-             cell staking_params, slice jetton_address, int withdrawal_factor_ton_1, int withdrawal_jetton_factor,
-             int reward_jettons, int withdrawable_jettons, int tvl, int force_unstake_allowed, slice creator_address) impure inline {
-    set_data(begin_cell()
-        .store_uint(next_item_index, 64)
-        .store_ref(nft_item_code)
-        .store_ref(content)
-        .store_ref(additional_info)
-        .store_dict(staking_params)
-        .store_slice(jetton_address)
-        .store_uint(withdrawal_factor_ton_1, 16)
-        .store_uint(withdrawal_jetton_factor, 16)
-        .store_coins(reward_jettons)
-        .store_coins(withdrawable_jettons)
-        .store_coins(tvl)
-        .store_uint(force_unstake_allowed, 1)
-        .store_slice(creator_address)
-        .end_cell());
+() save_data() impure inline {
+    set_data(
+        begin_cell()
+            .store_uint(storage::init?, 1)
+            .store_uint(storage::next_item_index, 32)
+            .store_ref(storage::nft_item_code)
+            .store_ref(storage::collection_content)
+            .store_slice(storage::lock_wallet_address)
+            .store_slice(storage::rewards_wallet_address)
+            .store_dict(storage::staking_params)
+            .store_coins(storage::minimum_deposit)
+            .store_uint(storage::commission_factor, 16)
+            .store_coins(storage::reward_jettons)
+            .store_coins(storage::withdrawable_jettons)
+            .store_ref(storage::last_cell)
+        .end_cell()
+    );
 }
 
 
-(int, int, int, int, slice) load_royalty_params(cell royalty) inline {
-    slice rs = royalty.begin_parse();
-    return (rs~load_uint(32), rs~load_uint(32), rs~load_uint(32), rs~load_uint(32), rs~load_msg_addr());
-}
-
-
-cell calculate_nft_item_state_init(int item_index, cell nft_item_code) {
+cell calculate_nft_item_state_init(int item_index) {
     cell data = begin_cell().store_uint(item_index, 64).store_slice(my_address()).end_cell();
-    return begin_cell().store_uint(0, 2).store_dict(nft_item_code).store_dict(data).store_uint(0, 1).end_cell();
+    return begin_cell().store_uint(0, 2).store_dict(storage::nft_item_code).store_dict(data).store_uint(0, 1).end_cell();
 }
 
 
@@ -82,8 +102,8 @@ slice calculate_nft_item_address(int wc, cell state_init) {
 }
 
 
-() deploy_nft_item(int item_index, cell nft_item_code, cell nft_content) impure inline {
-    cell state_init = calculate_nft_item_state_init(item_index, nft_item_code);
+() deploy_nft_item(int item_index, cell nft_content) impure inline {
+    cell state_init = calculate_nft_item_state_init(item_index);
     slice nft_address = calculate_nft_item_address(workchain(), state_init);
     builder msg = begin_cell()
                     .store_uint(0x18, 6)
@@ -148,9 +168,6 @@ slice calculate_nft_item_address(int wc, cell state_init) {
 
 
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
-    if (in_msg_body.slice_empty?()) { ;; ignore empty messages
-        return ();
-    }
     slice cs = in_msg_full.begin_parse();
     int flags = cs~load_uint(4);
     
@@ -159,15 +176,33 @@ slice calculate_nft_item_address(int wc, cell state_init) {
     }
     slice sender_address = cs~load_msg_addr();
 
+    load_data();
+    if (storage::init? == 0) {
+        storage::init? = 1;
+        load_last_cell();
+
+        builder tmp = begin_cell()
+                        .store_coins(gas_for_provide_addr)
+                        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                        .store_uint(op::provide_wallet_address, 32)
+                        .store_uint(now(), 64)
+                        .store_slice(my_address())
+                        .store_uint(0, 1);
+        builder msg_rewards = begin_cell().store_uint(0x18, 6).store_slice(storage::rewards_wallet_address).store_builder(tmp);
+        send_raw_message(msg_rewards.end_cell(), 1);
+
+        if (~ equal_slices(storage::rewards_wallet_address, storage::lock_wallet_address)) {
+            builder msg_lock = begin_cell().store_uint(0x18, 6).store_slice(storage::lock_wallet_address).store_builder(tmp);
+            send_raw_message(msg_lock.end_cell(), 1);
+        }
+
+        return ();
+    }
+    if (in_msg_body.slice_empty?()) { ;; ignore empty messages
+        return ();
+    }
     int op = in_msg_body~load_uint(32);
     int query_id = in_msg_body~load_uint(64);
-
-    var (next_item_index, nft_item_code, content, additional_info_c, staking_params, jetton_address, withdrawal_factor_ton_1,
-         withdrawal_jetton_factor, reward_jettons, withdrawable_jettons, tvl, force_unstake_allowed, creator_address) = load_data();
-    
-    slice additional_info = additional_info_c.begin_parse();
-    cell royalty_params = additional_info~load_ref();
-    (int tvl_factor, int tvl_base, int reward_factor, int reward_base, slice royalty_address) = load_royalty_params(royalty_params);
 
     ;; custom op-codes
     ;; someone transferred nft to somebody (not to this smc)
@@ -177,27 +212,22 @@ slice calculate_nft_item_address(int wc, cell state_init) {
     
     ;; jetton transfer notification
     if (op == op::transfer_notification) {
-        if (jetton_address.preload_uint(2) != 0) {  ;; "if jetton wallet address is already saved"
-            throw_unless(exc::incorrect_jetton, equal_slices(sender_address, jetton_address));  ;; check if sender is the jetton wallet
-        }
         throw_unless(exc::not_enough_ton_for_gas, msg_value >= gas_for_jetton_transfer);
         
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
 
-        int lockup_period = 0;
+        int lock_period = 0;
         ifnot (in_msg_body.slice_empty?()) {
-            lockup_period = in_msg_body~load_uint(32);
+            lock_period = in_msg_body~load_uint(32);
         }
 
-        if (lockup_period == 0xffffffff) {  ;; increase reward jettons
-            int tmp = jetton_amount * reward_factor / reward_base;
-            withdrawable_jettons += tmp; 
-            reward_jettons += jetton_amount - tmp;
-
-            jetton_address = sender_address;
-            save_data(next_item_index, nft_item_code, content, additional_info_c, staking_params, jetton_address, withdrawal_factor_ton_1, 
-                      withdrawal_jetton_factor, reward_jettons, withdrawable_jettons, tvl, force_unstake_allowed, creator_address);
+        if (lock_period == 0xffffffff) {  ;; increase reward jettons
+            throw_unless(exc::incorrect_jetton, equal_slices(sender_address, storage::rewards_wallet_address));
+            int commissions = muldiv(jetton_amount, storage::commission_factor, commission_devider);
+            storage::withdrawable_jettons += commissions; 
+            storage::reward_jettons += jetton_amount - commissions;
+            save_data();
 
             builder msg = begin_cell()
                             .store_uint(0x10, 6)
@@ -205,56 +235,44 @@ slice calculate_nft_item_address(int wc, cell state_init) {
                             .store_coins(0)
                             .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
                             .store_uint(op::excesses, 32);
-            send_raw_message(msg.end_cell(), 64);    
+            send_raw_message(msg.end_cell(), 64);   
 
             return ();
         }
         else {
-            int minimum_deposit = additional_info~load_coins();
-            if (jetton_amount < minimum_deposit) {
-                send_jettons(query_id, jetton_amount, from_address, jetton_address, 0, 64);
-                return ();
-            }
+            throw_unless(exc::incorrect_jetton, equal_slices(sender_address, storage::lock_wallet_address));
+            throw_unless(exc::less_then_min_deposit, jetton_amount >= storage::minimum_deposit);
 
-            int tvl_fees_max = jetton_amount * tvl_factor * lockup_period / one_day / tvl_base;  ;; max fees for this position
-
-            (slice staking_factor_slice, _) = staking_params.udict_get?(32, lockup_period);
-            int staking_factor = staking_base * reward_jettons + 1;
+            (slice staking_factor_slice, _) = storage::staking_params.udict_get?(32, lock_period);
+            int staking_factor = 0xffffffffffffffffffffffffffffffff;  ;; uint128_max
             if (~ staking_factor_slice.is_null?()) {
-                staking_factor = staking_factor_slice~load_uint(32);
+                staking_factor = staking_factor_slice~load_uint(128);
             }
             
-            int tmp = jetton_amount * staking_factor / staking_base;  ;; tmp = size of position including rewards 
-
-            if (reward_jettons < tmp + tvl_fees_max) {  ;; check that there are enough jettons to pay platform fees
-                ;; if not -> return jettons back
-                send_jettons(query_id, jetton_amount, from_address, jetton_address, 0, 64);
-                ;; we do not need to update data here
-                return ();
-            } 
+            int staking_rewards = muldiv(jetton_amount, staking_factor, staking_devider);
+            throw_unless(exc::no_rewards_left, storage::reward_jettons >= staking_rewards); 
 
             int now_time = now();
             cell nft_content = begin_cell()
-                                .store_uint(next_item_index, 64)  ;; nft item index for easy parsing
+                                .store_uint(storage::next_item_index, 64)
                                 .store_coins(0)  ;; rewards claimed
                                 .store_uint(now_time, 32)  ;; start time
-                                .store_uint(lockup_period, 32)  ;; lockup period
+                                .store_uint(lock_period, 32)  ;; lock period
                                 .store_coins(jetton_amount)  ;; amount of jettons to lock
-                                .store_uint(staking_factor, 32)  ;; staking rate factor
+                                .store_coins(staking_factor)  ;; staking rate factor
                             .end_cell();
             cell nft_message = begin_cell()
                                 .store_slice(from_address)  
                                 .store_ref(nft_content)
                             .end_cell();
             
-            deploy_nft_item(next_item_index, nft_item_code, nft_message);  ;; deploy NFT that proves ownership of locked jettons
+            deploy_nft_item(storage::next_item_index, nft_message);  ;; deploy NFT that proves ownership of locked jettons
 
-            reward_jettons -= (tmp + tvl_fees_max);  ;; decrease reward jettons
-            tvl += jetton_amount;  ;; increase tvl
-            next_item_index += 1;  ;; increase next_item_index
-            save_data(next_item_index, nft_item_code, content, additional_info_c, staking_params, jetton_address, withdrawal_factor_ton_1, 
-                      withdrawal_jetton_factor, reward_jettons, withdrawable_jettons, tvl, force_unstake_allowed, creator_address);
+            storage::reward_jettons -= staking_rewards;  ;; decrease reward jettons
+            ;; tvl += jetton_amount;  ;; increase tvl
+            storage::next_item_index += 1;  ;; increase next_item_index
 
+            save_data();
             return ();
         }
     }
@@ -268,9 +286,12 @@ slice calculate_nft_item_address(int wc, cell state_init) {
 
         ;; check that nft is from this collection
         int item_index = in_msg_body~load_uint(64);  
-        cell state_init = calculate_nft_item_state_init(item_index, nft_item_code);
+        cell state_init = calculate_nft_item_state_init(item_index);
         slice nft_address = calculate_nft_item_address(workchain(), state_init);
-        throw_unless(exc::incorrect_nft, equal_slices(sender_address, nft_address));
+        ifnot(equal_slices(sender_address, nft_address)) {
+            send_nft(query_id, nft_address, from_address, 0, 0, 64);
+            return ();
+        }
         
         slice nft_content = in_msg_body~load_ref().begin_parse();
         int sending_mode = in_msg_body~load_uint(1);
@@ -279,21 +300,18 @@ slice calculate_nft_item_address(int wc, cell state_init) {
         int start_time = nft_content~load_uint(32);
         int lock_period = nft_content~load_uint(32);
         int staked_amount = nft_content~load_coins();
-        int staking_factor = nft_content~load_uint(32);
+        int staking_factor = nft_content~load_coins();
         
         int end_time = start_time + lock_period;
         int now_time = min(now(), end_time);
 
-        int max_rewards = staked_amount * staking_factor / staking_base;
-        int rewards_gained =  max_rewards * (now_time - start_time) / lock_period;
-        int tvl_fees_cur = staked_amount * (now_time - start_time) / one_day * tvl_factor / tvl_base;
-        int tvl_fees_left = tvl_fees_cur * (end_time - now_time) / (now_time - start_time);
+        int max_rewards = muldiv(staked_amount, staking_factor, staking_devider);
+        int rewards_gained =  muldiv(max_rewards, (now_time - start_time), lock_period);
 
-        if ((sending_mode == 0) | (now_time == end_time)) {  ;; safe withdrawing or claim (don't close your position if lockup period isn't over)
+        if ((sending_mode == 0) | (now_time == end_time)) {  ;; safe withdrawing or claim (don't close your position if lock period isn't over)
+            send_jettons(query_id, rewards_gained - rewards_claimed, from_address, storage::rewards_wallet_address, gas_for_jetton_transfer, 0);
             ;; check that lockup period is over
             if (now_time < end_time) {   ;; if not -> return nft back to user and send rewards
-                send_jettons(query_id, rewards_gained - rewards_claimed, 
-                             from_address, jetton_address, gas_for_jetton_transfer, 0);
                 send_nft(query_id, nft_address, from_address,
                          rewards_gained, msg_value - gas_for_jetton_transfer, 0);
             }
@@ -310,66 +328,14 @@ slice calculate_nft_item_address(int wc, cell state_init) {
                                 .end_cell();
                 send_raw_message(burn_msg, 0); 
                 ;; and send jettons back
-                send_jettons(query_id, staked_amount + rewards_gained - rewards_claimed, 
-                             from_address, jetton_address, msg_value - gas_for_burn, 0);
-
-                withdrawable_jettons += tvl_fees_cur;  ;; increase withdrawable jettons by tvl_fees
-                tvl -= staked_amount;  ;; decrease tvl
+                send_jettons(query_id, staked_amount, from_address, storage::lock_wallet_address, msg_value - gas_for_burn - gas_for_jetton_transfer, 0);
             }
         }
         else {  ;; force close position 
-            msg_value = msg_value - withdrawal_factor_ton_1 * withdrawal_factor_ton_2 - gas_for_burn;
-            if ((msg_value < 0) | (force_unstake_allowed == 0)) {  ;; not enough ton to send jettons back or froce unstake isn't allowed -> return nft
-                send_nft(query_id, nft_address, from_address, rewards_claimed, 0, 64);
-                return ();
-            }
-
-            cell burn_msg = begin_cell()
-                                    .store_uint(0x18, 6)
-                                    .store_slice(sender_address)
-                                    .store_coins(gas_for_burn)
-                                    .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-                                    .store_uint(op::burn, 32)
-                                    .store_uint(query_id, 64)
-                                    .store_slice(from_address)
-                                .end_cell();
-            send_raw_message(burn_msg, 0); 
-
-            int jetton_fee = staked_amount * withdrawal_jetton_factor / withdrawal_jetton_base;  ;; 20% are for JVault while 80% are being added to rewards
-            send_jettons(query_id, staked_amount - jetton_fee - rewards_claimed, from_address, jetton_address, msg_value, 0);
-
-            withdrawable_jettons += jetton_fee * 20 / 100 + tvl_fees_cur;  ;;  increase withdrawable jettons 
-            reward_jettons += tvl_fees_left + max_rewards - rewards_claimed + jetton_fee * 80 / 100;  ;;  increase reward jettons 
-            tvl -= staked_amount;  ;; decrease tvl
+            ;; not implemented yet
         }
 
-        save_data(next_item_index, nft_item_code, content, additional_info_c, staking_params, jetton_address, withdrawal_factor_ton_1, 
-                  withdrawal_jetton_factor, reward_jettons, withdrawable_jettons, tvl, force_unstake_allowed, creator_address);
-
-        return ();
-    }
-
-    if (op == op::withdraw_fees) {  ;; withdraw fees
-        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, royalty_address));
-        throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer);
-
-        if (withdrawable_jettons != 0) {
-            send_jettons(query_id, withdrawable_jettons, sender_address, jetton_address, 0, 64);
-            withdrawable_jettons = 0;
-        }
-        
-        if (my_balance > min_tons_for_storage + msg_value + computing_gas + gas_for_simple_tx) {  ;; check that there is sufficient balance for tx
-            builder msg = begin_cell()
-                            .store_uint(0x10, 6)
-                            .store_slice(sender_address)
-                            .store_coins(my_balance - min_tons_for_storage - msg_value - computing_gas)
-                            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
-                        
-            send_raw_message(msg.end_cell(), 0); 
-        }
-        save_data(next_item_index, nft_item_code, content, additional_info_c, staking_params, jetton_address, withdrawal_factor_ton_1, 
-                  withdrawal_jetton_factor, reward_jettons, withdrawable_jettons, tvl, force_unstake_allowed, creator_address);
-
+        save_data();
         return ();
     }
 
@@ -386,40 +352,78 @@ slice calculate_nft_item_address(int wc, cell state_init) {
         return ();
     }
 
+    if (op == op::take_wallet_address) {  ;; change wallet address (used only once)
+        if (equal_slices(sender_address, storage::lock_wallet_address)) {
+            if (equal_slices(storage::lock_wallet_address, storage::rewards_wallet_address)) {
+                storage::rewards_wallet_address = in_msg_body~load_msg_addr();
+                storage::lock_wallet_address = storage::rewards_wallet_address;
+            }
+            else {
+                storage::lock_wallet_address = in_msg_body~load_msg_addr();
+            }
+        }
+        elseif (equal_slices(sender_address, storage::rewards_wallet_address)) {
+            storage::rewards_wallet_address = in_msg_body~load_msg_addr();
+        }
+        
+        save_data();
+        return ();
+    }
+
+    load_last_cell();
+
+    ;; admin op-codes
+    if (op == op::withdraw_fees) {  ;; withdraw fees
+        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, storage::admin_address));
+        throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer);
+
+        if (storage::withdrawable_jettons != 0) {
+            send_jettons(query_id, storage::withdrawable_jettons, sender_address, storage::rewards_wallet_address, 0, 64);
+            storage::withdrawable_jettons = 0;
+        }
+        
+        if (my_balance > min_tons_for_storage + msg_value + computing_gas + gas_for_simple_tx) {  ;; check that there is sufficient balance for tx
+            builder msg = begin_cell()
+                            .store_uint(0x10, 6)
+                            .store_slice(sender_address)
+                            .store_coins(my_balance - min_tons_for_storage - msg_value - computing_gas)
+                            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+                        
+            send_raw_message(msg.end_cell(), 0); 
+        }
+
+        save_data();
+        return ();
+    }
+
     if (op == op::withdraw_rewards) {
-        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, creator_address));
+        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, storage::creator_address));
         throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer + computing_gas);
 
         int jettons_to_withdraw = in_msg_body~load_coins();
-        throw_unless(exc::no_rewards_left, jettons_to_withdraw <= reward_jettons);
-        send_jettons(query_id, jettons_to_withdraw, sender_address, jetton_address, 0, 64);
-        reward_jettons -= jettons_to_withdraw;
+        throw_unless(exc::no_rewards_left, jettons_to_withdraw <= storage::reward_jettons);
+        send_jettons(query_id, jettons_to_withdraw, sender_address, storage::rewards_wallet_address, 0, 64);
+        storage::reward_jettons -= jettons_to_withdraw;
 
-        save_data(next_item_index, nft_item_code, content, additional_info_c, staking_params, jetton_address, withdrawal_factor_ton_1, 
-                  withdrawal_jetton_factor, reward_jettons, withdrawable_jettons, tvl, force_unstake_allowed, creator_address);
+        save_data();
         return ();
     }
+
     if (op == op::change_min_deposit) {
-        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, creator_address));
-        
-        int new_min_deposit = in_msg_body~load_coins();
-        cell new_additional_info = begin_cell()
-                                        .store_ref(royalty_params)
-                                        .store_coins(new_min_deposit)
-                                    .end_cell();
-
-        save_data(next_item_index, nft_item_code, content, new_additional_info, staking_params, jetton_address, withdrawal_factor_ton_1, 
-                  withdrawal_jetton_factor, reward_jettons, withdrawable_jettons, tvl, force_unstake_allowed, creator_address);
-
+        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, storage::creator_address));
+        storage::minimum_deposit = in_msg_body~load_coins();
+        save_data();
         return ();
     }
 
     if (op == op::withdraw_accident_jettons) {
-        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, creator_address) | equal_slices(sender_address, creator_address));
+        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, storage::admin_address) | equal_slices(sender_address, storage::creator_address));
         throw_unless(exc::not_enough_ton_for_fees, msg_value > gas_for_jetton_transfer + computing_gas);
 
         slice jetton_to_withdraw = in_msg_body~load_msg_addr();
-        throw_if(exc::incorrect_jetton, equal_slices(jetton_to_withdraw, jetton_address));  ;; cant't withdraw main jetton
+        throw_if(exc::incorrect_jetton,
+                 equal_slices(jetton_to_withdraw, storage::rewards_wallet_address) | equal_slices(jetton_to_withdraw, storage::lock_wallet_address));  ;; cant't withdraw main jetton
+
         int jetton_amount = in_msg_body~load_coins();
         send_jettons(query_id, jetton_amount, sender_address, jetton_to_withdraw, 0, 64);
 
@@ -433,22 +437,22 @@ slice calculate_nft_item_address(int wc, cell state_init) {
 ;; Get methods
 
 (int, cell, slice) get_collection_data() method_id {
-  var (next_item_index, _, content, _, _, _, _, _, _, _, _, _, _) = load_data();
-  slice cs = content.begin_parse();
-  return (next_item_index, cs~load_ref(), "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"a);
+  load_data();
+  slice cs = storage::collection_content.begin_parse();
+  return (storage::next_item_index, cs~load_ref(), "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"a);
 }
 
 
 slice get_nft_address_by_index(int index) method_id {
-    var (_, nft_item_code, _, _, _, _, _, _, _, _, _, _, _) = load_data();
-    cell state_init = calculate_nft_item_state_init(index, nft_item_code);
+    load_data();
+    cell state_init = calculate_nft_item_state_init(index);
     return calculate_nft_item_address(workchain(), state_init);
 }
 
 
 cell get_nft_content(int index, cell individual_content) method_id {
-    var (_, _, content, _, _, _, _, _, _, _, _, _, _) = load_data();
-    slice cs = content.begin_parse();
+    load_data();
+    slice cs = storage::collection_content.begin_parse();
     cs~load_ref();
     slice common_content = cs~load_ref().begin_parse();
 
@@ -476,30 +480,15 @@ cell get_nft_content(int index, cell individual_content) method_id {
 }
 
 
-(int, int, int, int, slice) get_royalty_params() method_id {  
-    var (_, _, _, additional_info, _, _, _, _, _, _, _, _, _) = load_data();
-    slice is = additional_info.begin_parse();
-    return load_royalty_params(is~load_ref());
+(int, cell, cell, slice, slice, cell, int, int, int, int, slice, slice) get_staking_data() method_id {
+    load_data();
+    load_last_cell();
+    return (storage::next_item_index, storage::nft_item_code, storage::collection_content, storage::lock_wallet_address,
+            storage::rewards_wallet_address, storage::staking_params, storage::minimum_deposit, storage::commission_factor,
+            storage::reward_jettons, storage::withdrawable_jettons, storage::admin_address, storage::creator_address);
 }
 
 
-slice get_jetton_address() method_id {
-    var (_, _, _, _, _, address, _, _, _, _, _, _, _) = load_data();
-    return address;
-}
-
-
-(int, int, int, int, int, int, int, int, int, int, slice, cell, slice, int, slice, int) get_staking_data() method_id {
-    (int next_index, _, _, cell additional_info, cell staking_params, slice jetton_address,
-     int withdrawal_factor_ton_1, int withdrawal_jetton_factor, int reward_jettons, 
-     int withdrawable_jettons, int tvl, int force_unstake_allowed, slice creator_address) = load_data();
-
-    slice is = additional_info.begin_parse();
-    (int tvl_factor, int tvl_base, int reward_factor,
-     int reward_base, slice royalty_address) = load_royalty_params(is~load_ref()); 
-    int min_deposit = is~load_coins();
-
-    return (tvl_factor, tvl_base, reward_factor, reward_base, withdrawal_jetton_factor, withdrawal_jetton_base, 
-            withdrawal_factor_ton_1 * withdrawal_factor_ton_2, reward_jettons, withdrawable_jettons, tvl, 
-            royalty_address, staking_params, jetton_address, force_unstake_allowed, creator_address, min_deposit);
+(cell) raw_get_data() method_id {
+    return get_data();
 }

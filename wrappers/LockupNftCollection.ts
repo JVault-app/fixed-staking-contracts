@@ -2,22 +2,17 @@ import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, 
 import { CollectionMint, MintValue } from './helpers/collectionHelpers';
 import { encodeOffChainContent } from './helpers/content';
 
-export type RoyaltyParams = {
-    tvlFactor: number;
-    tvlBase: number;
-    rewardsFactor: number;
-    rewardsBase: number;
-    royaltyAddress: Address;
-};
 
 export type NftCollectionConfig = {
-    nextItemIndex: number;
     collectionContent: Cell;
     nftItemCode: Cell;
-    royaltyParams: RoyaltyParams;
-    stakingParams: Dictionary<number, number>;
-    withdrawalFactorTon1: number;
-    withdrawalFactorJetton: number;
+    lock_wallet_address: Address;
+    rewards_wallet_address: Address;
+    staking_params: Dictionary<number, number>;
+    minimum_deposit: number;
+    commission_factor: number;
+    admin_address: Address;
+    creator_address: Address;
 };
 
 export type NftCollectionContent = {
@@ -41,24 +36,19 @@ export function buildNftCollectionContentCell(data: NftCollectionContent): Cell 
 
 export function nftCollectionConfigToCell(config: NftCollectionConfig): Cell {
     return beginCell()
-        .storeUint(config.nextItemIndex, 64)
+        .storeUint(0, 33)
         .storeRef(config.nftItemCode)
         .storeRef(config.collectionContent)
+        .storeAddress(config.lock_wallet_address)
+        .storeAddress(config.rewards_wallet_address)
+        .storeDict(config.staking_params)
+        .storeCoins(config.minimum_deposit)
+        .storeUint(config.commission_factor, 16)
+        .storeCoins(0)
+        .storeCoins(0)
         .storeRef(
-            beginCell()
-                .storeUint(config.royaltyParams.tvlFactor, 32)
-                .storeUint(config.royaltyParams.tvlBase, 32)
-                .storeUint(config.royaltyParams.rewardsFactor, 32)
-                .storeUint(config.royaltyParams.rewardsBase, 32)
-                .storeAddress(config.royaltyParams.royaltyAddress)
-            .endCell()
+            beginCell().storeAddress(config.admin_address).storeAddress(config.creator_address).endCell()
         )
-        .storeDict(config.stakingParams)
-        .storeUint(0, 2)
-        .storeUint(config.withdrawalFactorTon1, 16)
-        .storeUint(config.withdrawalFactorJetton, 16)
-        .storeCoins(0)
-        .storeCoins(0)
     .endCell();
 }
 

@@ -1,6 +1,8 @@
 ;; Jettons
 const int op::transfer_jetton = 0xf8a7ea5;
 const int op::transfer_notification = 0x7362d09c;
+const int op::provide_wallet_address = 0x2c76b973;
+const int op::take_wallet_address    = 0xd1735400;
 
 ;; NFT
 const int op::transfer = 0x5fcc3d14;

@@ -5,7 +5,7 @@
 #include "imports/exceptions.fc";
 
 
-const int gas_for_deploy = 80000000;  ;; 0.08    TON
+const int gas_for_deploy = 200000000;  ;; 0.2    TON
 const int gas_for_jetton_transfer = 100000000;  ;; 0.1 TON
 const int min_withdrawable_amount = 100000000;  ;; 0.1 TON
 const int min_tons_for_storage = 50000000;  ;; 0.05 TON
@@ -100,11 +100,10 @@ const int tons_for_notification = 5000000;
     (cell nft_item_code, int creation_fee) = (other_data~load_ref(), other_data~load_coins());
 
     if (op == 1) {  ;; deploy new pool
-        throw_unless(exc::not_enough_ton_for_fees,
-                     msg_value > creation_fee + gas_for_deploy);
+        throw_unless(exc::not_enough_ton_for_fees, msg_value > creation_fee + gas_for_deploy);
 
         cell data = begin_cell()
-                        .store_uint(0, 64)
+                        .store_uint(0, 33)
                         .store_ref(nft_item_code)
                         .store_slice(in_msg_body)
                     .end_cell();

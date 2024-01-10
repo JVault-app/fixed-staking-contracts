@@ -152,6 +152,7 @@ int min_tons_for_storage() asm "50000000 PUSHINT"; ;; 0.05 TON
                       .store_slice(owner_address)  ;; previous owner address
                       .store_coins(msg_value - min_tons_for_storage())
                       .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                      .store_uint(op::ownership_assigned, 32)
                     .end_cell();
         send_raw_message(msg, 0);
 
@@ -182,6 +183,7 @@ int min_tons_for_storage() asm "50000000 PUSHINT"; ;; 0.05 TON
         send_msg(sender_address, 0, op::report_static_data, query_id, begin_cell().store_uint(index, 256).store_slice(collection_address), 64);  ;; carry all the remaining value of the inbound message
         return ();
     }
+
     throw(0xffff);
 }
 
