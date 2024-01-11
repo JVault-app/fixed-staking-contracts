@@ -203,3 +203,7 @@ int min_tons_for_storage() asm "50000000 PUSHINT"; ;; 0.05 TON
   return (cs~load_coins(), cs~load_uint(32), cs~load_uint(32), cs~load_coins(), ;; returns rewards_claimed, lockup_start_time, lockup_period, locked_amount,
           cs~load_uint(32), index, owner_address, collection_address);  ;; staking_factor, index, owner_address, collection_address
 }
+
+(int) get_version() method_id {
+    return 2;
+}
