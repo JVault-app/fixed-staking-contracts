@@ -37,6 +37,7 @@ global int storage::withdrawable_jettons;
 global cell storage::last_cell;
 global slice storage::admin_address;
 global slice storage::creator_address;
+global int storage::tvl;
 
 
 () load_data() impure inline {
@@ -55,7 +56,8 @@ global slice storage::creator_address;
     storage::commission_factor      = ds~load_uint(16);
     storage::reward_jettons         = ds~load_coins();
     storage::withdrawable_jettons   = ds~load_coins();
-    
+    storage::tvl                    = ds~load_coins();
+
     storage::last_cell              = ds~load_ref();
 }
 
@@ -80,6 +82,7 @@ global slice storage::creator_address;
             .store_uint(storage::commission_factor, 16)
             .store_coins(storage::reward_jettons)
             .store_coins(storage::withdrawable_jettons)
+            .store_coins(storage::tvl)  ;; theoretically there can be an error
             .store_ref(storage::last_cell)
         .end_cell()
     );
@@ -195,7 +198,7 @@ slice calculate_nft_item_address(int wc, cell state_init) {
             builder msg_lock = begin_cell().store_uint(0x18, 6).store_slice(storage::lock_wallet_address).store_builder(tmp);
             send_raw_message(msg_lock.end_cell(), 1);
         }
-
+        save_data();
         return ();
     }
     if (in_msg_body.slice_empty?()) { ;; ignore empty messages
@@ -269,7 +272,7 @@ slice calculate_nft_item_address(int wc, cell state_init) {
             deploy_nft_item(storage::next_item_index, nft_message);  ;; deploy NFT that proves ownership of locked jettons
 
             storage::reward_jettons -= staking_rewards;  ;; decrease reward jettons
-            ;; tvl += jetton_amount;  ;; increase tvl
+            storage::tvl += jetton_amount;  ;; increase tvl
             storage::next_item_index += 1;  ;; increase next_item_index
 
             save_data();
@@ -313,7 +316,7 @@ slice calculate_nft_item_address(int wc, cell state_init) {
             ;; check that lockup period is over
             if (now_time < end_time) {   ;; if not -> return nft back to user and send rewards
                 send_nft(query_id, nft_address, from_address,
-                         rewards_gained, msg_value - gas_for_jetton_transfer, 0);
+                        rewards_gained, msg_value - gas_for_jetton_transfer, 0);
             }
             else {  ;; else -> unstake
                 ;; burn nft after unstaking
@@ -422,7 +425,7 @@ slice calculate_nft_item_address(int wc, cell state_init) {
 
         slice jetton_to_withdraw = in_msg_body~load_msg_addr();
         throw_if(exc::incorrect_jetton,
-                 equal_slices(jetton_to_withdraw, storage::rewards_wallet_address) | equal_slices(jetton_to_withdraw, storage::lock_wallet_address));  ;; cant't withdraw main jetton
+                equal_slices(jetton_to_withdraw, storage::rewards_wallet_address) | equal_slices(jetton_to_withdraw, storage::lock_wallet_address));  ;; cant't withdraw main jetton
 
         int jetton_amount = in_msg_body~load_coins();
         send_jettons(query_id, jetton_amount, sender_address, jetton_to_withdraw, 0, 64);
@@ -437,18 +440,16 @@ slice calculate_nft_item_address(int wc, cell state_init) {
 ;; Get methods
 
 (int, cell, slice) get_collection_data() method_id {
-  load_data();
-  slice cs = storage::collection_content.begin_parse();
-  return (storage::next_item_index, cs~load_ref(), "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"a);
+load_data();
+slice cs = storage::collection_content.begin_parse();
+return (storage::next_item_index, cs~load_ref(), "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"a);
 }
-
 
 slice get_nft_address_by_index(int index) method_id {
     load_data();
     cell state_init = calculate_nft_item_state_init(index);
     return calculate_nft_item_address(workchain(), state_init);
 }
-
 
 cell get_nft_content(int index, cell individual_content) method_id {
     load_data();
@@ -474,21 +475,22 @@ cell get_nft_content(int index, cell individual_content) method_id {
             .end_cell());
 }
 
-
 (int, int, slice) royalty_params() method_id {  ;; for marketplaces and explorers
     return (0, 100, my_address());
 }
 
-
-(int, cell, cell, slice, slice, cell, int, int, int, int, slice, slice) get_staking_data() method_id {
+(int, cell, cell, slice, slice, cell, int, int, int, int, slice, slice, int) get_staking_data() method_id {
     load_data();
     load_last_cell();
     return (storage::next_item_index, storage::nft_item_code, storage::collection_content, storage::lock_wallet_address,
             storage::rewards_wallet_address, storage::staking_params, storage::minimum_deposit, storage::commission_factor,
-            storage::reward_jettons, storage::withdrawable_jettons, storage::admin_address, storage::creator_address);
+            storage::reward_jettons, storage::withdrawable_jettons, storage::admin_address, storage::creator_address, storage::tvl);
 }
-
 
 (cell) raw_get_data() method_id {
     return get_data();
+}
+
+(int) get_version() method_id {
+    return 2;
 }
