@@ -331,6 +331,7 @@ slice calculate_nft_item_address(int wc, cell state_init) {
                                 .end_cell();
                 send_raw_message(burn_msg, 0); 
                 ;; and send jettons back
+                storage::tvl -= staked_amount;
                 send_jettons(query_id, staked_amount, from_address, storage::lock_wallet_address, msg_value - gas_for_burn - gas_for_jetton_transfer, 0);
             }
         }
