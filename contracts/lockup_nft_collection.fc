@@ -35,7 +35,6 @@ global int storage::minimum_deposit;
 global int storage::commission_factor;
 
 global int storage::reward_jettons;
-global int storage::withdrawable_jettons;
 
 global cell storage::last_cell;
 global slice storage::admin_address;
@@ -58,7 +57,6 @@ global int storage::tvl;
     storage::minimum_deposit        = ds~load_coins();
     storage::commission_factor      = ds~load_uint(16);
     storage::reward_jettons         = ds~load_coins();
-    storage::withdrawable_jettons   = ds~load_coins();
     storage::tvl                    = ds~load_coins();
 
     storage::wallet_lock_changed    = ds~load_uint(1);
@@ -87,8 +85,7 @@ global int storage::tvl;
             .store_coins(storage::minimum_deposit)
             .store_uint(storage::commission_factor, 16)
             .store_coins(storage::reward_jettons)
-            .store_coins(storage::withdrawable_jettons)
-            .store_coins(storage::tvl)  ;; theoretically there can be an error
+            .store_coins(storage::tvl)
             .store_uint(storage::wallet_lock_changed, 1)
             .store_uint(storage::wallet_rewards_changed, 1)
             .store_ref(storage::last_cell)
@@ -235,15 +232,21 @@ slice calculate_nft_item_address(int wc, cell state_init) {
 
         if (lock_period == 0xffffffff) {  ;; increase reward jettons
             if (storage::wallet_rewards_changed == 0) {   ;; for non-discoverable jettons
+                if (equal_slices(storage::rewards_wallet_address, storage::lock_wallet_address)) {
+                    storage::wallet_lock_changed = 1;
+                    storage::lock_wallet_address = sender_address;
+                }
                 storage::rewards_wallet_address = sender_address;
                 storage::wallet_rewards_changed = 1;
             } 
-            ifnot (equal_slices(sender_address, storage::rewards_wallet_address)) {
+            elseifnot (equal_slices(sender_address, storage::rewards_wallet_address)) {
                 send_jettons(query_id, jetton_amount, from_address, sender_address, 0, 64);
                 return ();
             }
+            load_last_cell();
             int commissions = muldiv(jetton_amount, storage::commission_factor, commission_devider);
-            storage::withdrawable_jettons += commissions; 
+            send_jettons(query_id, commissions, storage::admin_address, storage::rewards_wallet_address, gas_for_jetton_transfer, 0);
+
             storage::reward_jettons += jetton_amount - commissions;
             save_data();
 
@@ -258,9 +261,11 @@ slice calculate_nft_item_address(int wc, cell state_init) {
             return ();
         }
         else {
-            ;; throw_unless(exc::incorrect_jetton, equal_slices(sender_address, storage::lock_wallet_address));
-            ;; throw_unless(exc::less_then_min_deposit, jetton_amount >= storage::minimum_deposit);
             if (storage::wallet_lock_changed == 0) {  ;; for non-discoverable jettons
+                if (equal_slices(storage::rewards_wallet_address, storage::lock_wallet_address)) {
+                    storage::rewards_wallet_address = sender_address;
+                    storage::wallet_rewards_changed = 1;
+                }
                 storage::lock_wallet_address = sender_address;
                 storage::wallet_lock_changed = 1;
             } 
@@ -303,7 +308,7 @@ slice calculate_nft_item_address(int wc, cell state_init) {
     }
 
     ;; NFT transfer notification
-    if (op == op::ownership_assigned) {
+    if (op == op::ownership_assigned) {  ;;  legacy :(
         msg_value -= computing_gas;
         throw_unless(exc::not_enough_ton_for_gas, msg_value >= gas_for_jetton_transfer + gas_for_nft_transfer);
 
@@ -387,7 +392,7 @@ slice calculate_nft_item_address(int wc, cell state_init) {
                 storage::wallet_rewards_changed = 1;
             }
             else {
-                storage::lock_wallet_address = in_msg_body~load_msg_addr();
+                storage::lock_wallet_address = in_msg_body~load_msg_addr(); 
             }
         }
         elseif (equal_slices(sender_address, storage::rewards_wallet_address)) {
@@ -402,36 +407,15 @@ slice calculate_nft_item_address(int wc, cell state_init) {
     load_last_cell();
 
     ;; admin op-codes
-    if (op == op::withdraw_fees) {  ;; withdraw fees
-        throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, storage::admin_address));
-        throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer);
-
-        if (storage::withdrawable_jettons != 0) {
-            send_jettons(query_id, storage::withdrawable_jettons, sender_address, storage::rewards_wallet_address, 0, 64);
-            storage::withdrawable_jettons = 0;
-        }
-        
-        if (my_balance > min_tons_for_storage + msg_value + computing_gas + gas_for_simple_tx) {  ;; check that there is sufficient balance for tx
-            builder msg = begin_cell()
-                            .store_uint(0x10, 6)
-                            .store_slice(sender_address)
-                            .store_coins(my_balance - min_tons_for_storage - msg_value - computing_gas)
-                            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
-                        
-            send_raw_message(msg.end_cell(), 0); 
-        }
-
-        save_data();
-        return ();
-    }
 
     if (op == op::withdraw_rewards) {
         throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, storage::creator_address));
         throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer + computing_gas);
-
+        
+        raw_reserve(min_tons_for_storage, 0);
         int jettons_to_withdraw = in_msg_body~load_coins();
         throw_unless(exc::no_rewards_left, jettons_to_withdraw <= storage::reward_jettons);
-        send_jettons(query_id, jettons_to_withdraw, sender_address, storage::rewards_wallet_address, 0, 64);
+        send_jettons(query_id, jettons_to_withdraw, sender_address, storage::rewards_wallet_address, 0, 128);
         storage::reward_jettons -= jettons_to_withdraw;
 
         save_data();
@@ -449,12 +433,13 @@ slice calculate_nft_item_address(int wc, cell state_init) {
         throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, storage::admin_address) | equal_slices(sender_address, storage::creator_address));
         throw_unless(exc::not_enough_ton_for_fees, msg_value > gas_for_jetton_transfer + computing_gas);
 
+        raw_reserve(min_tons_for_storage, 0);
         slice jetton_to_withdraw = in_msg_body~load_msg_addr();
         throw_if(exc::incorrect_jetton,
                 equal_slices(jetton_to_withdraw, storage::rewards_wallet_address) | equal_slices(jetton_to_withdraw, storage::lock_wallet_address));  ;; cant't withdraw main jetton
 
         int jetton_amount = in_msg_body~load_coins();
-        send_jettons(query_id, jetton_amount, sender_address, jetton_to_withdraw, 0, 64);
+        send_jettons(query_id, jetton_amount, sender_address, jetton_to_withdraw, 0, 128);
 
         return ();
     }
@@ -510,7 +495,7 @@ cell get_nft_content(int index, cell individual_content) method_id {
     load_last_cell();
     return (storage::next_item_index, storage::nft_item_code, storage::collection_content, storage::lock_wallet_address,
             storage::rewards_wallet_address, storage::staking_params, storage::minimum_deposit, storage::commission_factor,
-            storage::reward_jettons, storage::withdrawable_jettons, storage::admin_address, storage::creator_address, storage::tvl);
+            storage::reward_jettons, 0, storage::admin_address, storage::creator_address, storage::tvl);
 }
 
 (cell) raw_get_data() method_id {
