@@ -250,13 +250,15 @@ slice calculate_nft_item_address(int wc, cell state_init) {
             storage::reward_jettons += jetton_amount - commissions;
             save_data();
 
-            builder msg = begin_cell()
-                            .store_uint(0x10, 6)
-                            .store_slice(from_address)
-                            .store_coins(0)
-                            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-                            .store_uint(op::excesses, 32);
-            send_raw_message(msg.end_cell(), 64);   
+            if (msg_value > computing_gas + gas_for_jetton_transfer + gas_for_simple_tx) {
+                builder msg = begin_cell()
+                                .store_uint(0x10, 6)
+                                .store_slice(from_address)
+                                .store_coins(msg_value - computing_gas - gas_for_jetton_transfer)
+                                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                                .store_uint(op::excesses, 32);
+                send_raw_message(msg.end_cell(), 0);   
+            }
 
             return ();
         }
