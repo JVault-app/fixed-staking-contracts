@@ -282,7 +282,10 @@ slice calculate_nft_item_address(int wc, cell state_init) {
             }
             
             int staking_rewards = muldiv(jetton_amount, staking_factor, staking_devider);
-            throw_unless(exc::no_rewards_left, storage::reward_jettons >= staking_rewards); 
+            if (storage::reward_jettons < staking_rewards) {
+                send_jettons(query_id, jetton_amount, from_address, sender_address, 0, 64);
+                return ();
+            } 
 
             int now_time = now();
             cell nft_content = begin_cell()
