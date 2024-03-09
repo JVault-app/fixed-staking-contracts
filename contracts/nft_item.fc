@@ -90,25 +90,19 @@ int min_tons_for_storage() asm "50000000 PUSHINT"; ;; 0.05 TON
     throw_unless(402, rest_amount >= 0); ;; base nft spends fixed amount of gas, will not check for response
 
     if (forward_amount) {
-        if (equal_slices(collection_address, owner_address)) {
-            ;; update claimed_rewards
-            slice old_content = content.begin_parse();
-            old_content~load_coins();
-            content =  begin_cell().store_slice(in_msg_body).store_slice(old_content).end_cell();
-
-            send_msg(new_owner_address, forward_amount, op::ownership_assigned,
-                     query_id, begin_cell().store_slice(owner_address).store_uint(0, 1), 1);
+        if (equal_slices(collection_address, new_owner_address)) {
+            send_msg(new_owner_address, forward_amount, op::ownership_assigned, query_id, 
+                begin_cell().store_slice(owner_address).store_uint(index, 64).store_ref(content).store_slice(in_msg_body), 1); 
         }
         else {
-            send_msg(new_owner_address, forward_amount, op::ownership_assigned, query_id, 
-                    begin_cell().store_slice(owner_address).store_uint(index, 64).store_ref(content).store_slice(in_msg_body), 1); 
-
-            if (~ equal_slices(collection_address, new_owner_address)) {  ;; notify collection that nft was transferred
-                
-                send_msg(collection_address, 1, op::nft_transferred, query_id, 
-                         begin_cell().store_slice(owner_address).store_slice(new_owner_address), 1);
-                         
+            if (equal_slices(collection_address, owner_address)) {
+                ;; update claimed_rewards
+                slice old_content = content.begin_parse();
+                old_content~load_coins();
+                content =  begin_cell().store_slice(in_msg_body).store_slice(old_content).end_cell();
             }
+            send_msg(new_owner_address, forward_amount, op::ownership_assigned,
+                     query_id, begin_cell().store_slice(owner_address).store_slice(in_msg_body), 1);
         }
     }
 
