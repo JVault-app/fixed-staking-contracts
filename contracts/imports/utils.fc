@@ -1,3 +1,5 @@
+#include "constants.fc";
+
 int workchain() asm "0 PUSHINT";
 
 () force_chain(slice addr) impure {
@@ -5,50 +7,11 @@ int workchain() asm "0 PUSHINT";
   throw_unless(333, wc == workchain());
 }
 
-() notify_owner(slice owner_address, int msg_value,  slice msg) impure inline {
-    builder msg = begin_cell()
-            .store_uint(0x18, 6) 
-            .store_slice(owner_address)
-            .store_coins(msg_value)
-            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-            .store_uint(0, 32)
-            .store_slice(msg);
-    send_raw_message(msg.end_cell(), 0);
-}
-
 int is_null?(slice s) asm "ISNULL";
 
 int min_tons_for_storage() asm "50000000 PUSHINT"; ;; 0.05 TON
 
 {-      NFT     -}
-cell calculate_nft_item_state_init(int item_index) {
-    cell data = begin_cell().store_uint(item_index, 64).store_slice(my_address()).end_cell();
-    return begin_cell().store_uint(0, 2).store_dict(storage::nft_item_code).store_dict(data).store_uint(0, 1).end_cell();
-}
-
-
-slice calculate_nft_item_address(int wc, cell state_init) {
-    return begin_cell()
-                .store_uint(4, 3)
-                .store_int(wc, 8)
-                .store_uint(cell_hash(state_init), 256)
-                .end_cell()
-            .begin_parse();
-}
-
-
-() deploy_nft_item(int item_index, cell nft_content) impure inline {
-    cell state_init = calculate_nft_item_state_init(item_index);
-    slice nft_address = calculate_nft_item_address(workchain(), state_init);
-    builder msg = begin_cell()
-                    .store_uint(0x18, 6)
-                    .store_slice(nft_address)
-                    .store_coins(0)
-                    .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
-                    .store_ref(state_init)
-                    .store_ref(nft_content);
-    send_raw_message(msg.end_cell(), 64); 
-}
 
 () send_msg(slice to_address, int amount, int op, int query_id, builder payload, int send_mode) impure inline {
     var msg = begin_cell()
@@ -77,7 +40,7 @@ slice calculate_nft_item_address(int wc, cell state_init) {
                     .store_uint(1, 1)
                     .store_ref(
                         begin_cell()
-                            .store_uint(op::transfer, 32)
+                            .store_uint(op::transfer_nft, 32)
                             .store_uint(query_id, 64)
                             .store_slice(to_address)
                             .store_slice(to_address)

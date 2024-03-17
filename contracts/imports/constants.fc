@@ -93,8 +93,18 @@ const slice burn_address = "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"a;
 
 const int exc::incorrect_sender_address = 0x191;
 const int exc::not_enough_ton_for_gas = 13;
-const int exc::incorrect_jetton = 0x194;
 const int exc::incorrect_nft = 0x195;
-const int exc::incorrect_lock_period = 0x196;
 const int exc::no_rewards_left = 0x197;
 const int exc::less_then_min_deposit = 0x198;
+
+const int gas_for_jetton_transfer = 80000000;  ;; 0.08 TON
+const int gas_for_nft_transfer = 50000000;  ;; 0.05 TON
+const int gas_for_burn = 10000000;  ;; 0.01 TON
+const int gas_for_provide_addr = 20000000;  ;; 0.02 TON
+const int gas_for_simple_tx = 7000000;  ;; 0.007 TON
+const int computing_gas = 15000000;  ;; 0.015 TON
+const int staking_devider = 1000000000;
+
+const int gas_for_deploy = 120000000;  ;; 0.12    TON
+const int min_withdrawable_amount = 100000000;  ;; 0.1 TON
+const int tons_for_notification = 5000000;

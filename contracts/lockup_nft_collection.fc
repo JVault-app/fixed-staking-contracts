@@ -3,20 +3,6 @@
 #include "imports/constants.fc";
 #include "imports/utils.fc";
 
-
-const int gas_for_jetton_transfer = 80000000;  ;; 0.08 TON
-const int gas_for_nft_transfer = 50000000;  ;; 0.05 TON
-const int gas_for_burn = 10000000;  ;; 0.01 TON
-const int gas_for_provide_addr = 20000000;  ;; 0.02 TON
-const int gas_for_simple_tx = 7000000;  ;; 0.007 TON
-const int computing_gas = 15000000;  ;; 0.015 TON
-const int min_tons_for_storage = 50000000;  ;; 0.05 TON
-
-const int one_day = 60 * 60 * 24;
-const int commission_devider = 100000;
-const int staking_devider = 1000000000;
-
-
 global int storage::init?;
 global int storage::next_item_index;
 global cell storage::nft_item_code;
@@ -91,6 +77,33 @@ global slice storage::creator_address;
     );
 }
 
+cell calculate_nft_item_state_init(int item_index) {
+    cell data = begin_cell().store_uint(item_index, 64).store_slice(my_address()).end_cell();
+    return begin_cell().store_uint(0, 2).store_dict(storage::nft_item_code).store_dict(data).store_uint(0, 1).end_cell();
+}
+
+
+slice calculate_nft_item_address(int wc, cell state_init) {
+    return begin_cell()
+                .store_uint(4, 3)
+                .store_int(wc, 8)
+                .store_uint(cell_hash(state_init), 256)
+                .end_cell()
+            .begin_parse();
+}
+
+() deploy_nft_item(int item_index, cell nft_content) impure inline {
+    cell state_init = calculate_nft_item_state_init(item_index);
+    slice nft_address = calculate_nft_item_address(workchain(), state_init);
+    builder msg = begin_cell()
+                    .store_uint(0x18, 6)
+                    .store_slice(nft_address)
+                    .store_coins(0)
+                    .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+                    .store_ref(state_init)
+                    .store_ref(nft_content);
+    send_raw_message(msg.end_cell(), 64); 
+}
 
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
     slice cs = in_msg_full.begin_parse();

@@ -1,17 +1,21 @@
-import { Address, toNano } from '@ton/core';
+import { Address, Slice, toNano, Cell, beginCell } from '@ton/core';
 import { PoolsAdmin } from '../wrappers/PoolsAdmin';
 import { compile, NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {
     const poolsAdmin = provider.open(PoolsAdmin.createFromConfig({
+        creationFee: 100000000n,  // 0.1 TON
+        changeFee: 100000000n,    // 0.1 JVT
+        jvtStakingAddress: Address.parse("kQBMkMK08LGfS6vApVxiMGnjB27O7VhdWqralEdaB87L4pYt"),
+        jvtWalletAddress: Address.parse("kQBMkMK08LGfS6vApVxiMGnjB27O7VhdWqralEdaB87L4pYt"),
+
+        sharecomsCode: await compile('Sharecoms'),
         stakingPoolCode: await compile("LockupNftCollection"),
         nftItemCode: await compile('NftItem'),
-        sharecomsCode: await compile('Sharecoms'),
 
-        creationFee: 10000000000n,  // 10 TON
-        
-        ownerAddress1: Address.parse("EQCovSj8c8Ik1I-RZt7dbIOEulYe-MfJ2SN5eMhxwfACvsM0") as Address,
-        ownerAddress2: Address.parse("UQC228vvLVzjK4t7CUfRhlQuxJqfB5sJzAZNEilvbpY6CzZk") as Address
+        teamAddress: Address.parse("0QCWVqwkomdw-o4wsVqdBO_HHkv584nZw0ziJUVgeUWG6MkO") as Address,
+        conversionAddress: Address.parse("0QCWVqwkomdw-o4wsVqdBO_HHkv584nZw0ziJUVgeUWG6MkO") as Address,
+        host: "https://jvault.ru"
     }, await compile('PoolsAdmin')));
 
     await poolsAdmin.sendDeploy(provider.sender(), toNano('0.05'));
