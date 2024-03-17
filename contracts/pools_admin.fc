@@ -17,8 +17,8 @@ global cell storage::sharecoms_code;
 
 global int storage::creation_fee;
 
-global slice storage::owner_address_1;
-global slice storage::owner_address_2;
+global slice storage::team_address;
+global slice storage::conversion_address;
 
 () save_all_data() impure {
     set_data(begin_cell()
@@ -29,8 +29,8 @@ global slice storage::owner_address_2;
 
                 .store_coins(storage::creation_fee)
                 
-                .store_slice(storage::owner_address_1)
-                .store_slice(storage::owner_address_2)
+                .store_slice(storage::team_address)
+                .store_slice(storage::conversion_address)
             .end_cell());
 }
 
@@ -141,8 +141,40 @@ global slice storage::owner_address_2;
         return ();
     }
 
-    (slice owner_address_1, slice owner_address_2) = (other_data~load_msg_addr(), other_data~load_msg_addr());
-    throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, owner_address_1));
+    if (inner_op == op::send_commissions) {
+        throw_unless(exc::out_of_gas, msg_value > gas::jetton_transfer * 3 + gas::update_sharecoms);
+
+        cell sharecoms_data = begin_cell()
+                                    .store_slice(from_address)
+                                    .store_slice(my_address())
+                            .end_cell();
+        
+        cell sharecoms_state_init = begin_cell()
+                                        .store_uint(0, 2)
+                                        .store_dict(storage::sharecoms_code)
+                                        .store_dict(sharecoms_data)
+                                        .store_uint(0, 1)
+                                    .end_cell();
+
+        slice sharecoms_address = begin_cell()
+                                        .store_uint(4, 3)
+                                        .store_int(workchain(), 8)
+                                        .store_uint(cell_hash(sharecoms_state_init), 256)
+                                .end_cell().begin_parse();
+        
+        slice excess_address = payload~load_msg_addr();
+        ;; 10% for the team
+        send_jettons(query_id, muldiv(jetton_amount, 1, 10), storage::team_address, excess_address, sender_address, gas::jetton_transfer, 0, 1, null());
+        ;; 40% for conversion to JVT and burn
+        send_jettons(query_id, muldiv(jetton_amount, 4, 10), storage::conversion_address, excess_address, sender_address, gas::jetton_transfer, 0, 1, null());  
+        ;; 50% for distribution above JVT stakers 
+        send_jettons(query_id, muldiv(jetton_amount, 5, 10), sharecoms_address, excess_address, sender_address, 0, 128, gas::update_sharecoms, null());
+
+        return ();
+    }
+
+    (slice storage::team_address, slice storage::conversion_address) = (other_data~load_msg_addr(), other_data~load_msg_addr());
+    throw_unless(exc::incorrect_sender_address, equal_slices(sender_address, storage::team_address));
 
     if (op == 2) {  ;; harvest royalty from staking pool
         throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer);
@@ -162,9 +194,9 @@ global slice storage::owner_address_2;
         throw_unless(exc::not_enough_ton_for_gas, msg_value > gas_for_jetton_transfer * 2);
         slice jetton_wallet_address = in_msg_body~load_msg_addr();
         int jetton_amount = in_msg_body~load_coins() / 2;
-        send_jettons(query_id, jetton_amount, owner_address_1, 
+        send_jettons(query_id, jetton_amount, storage::team_address, 
                     jetton_wallet_address, gas_for_jetton_transfer, 0);
-        send_jettons(query_id, jetton_amount, owner_address_2, 
+        send_jettons(query_id, jetton_amount, storage::conversion_address, 
                     jetton_wallet_address, gas_for_jetton_transfer, 0);
         return ();
     }
@@ -176,13 +208,13 @@ global slice storage::owner_address_2;
         }
         builder msg = begin_cell()
                         .store_uint(0x10, 6)
-                        .store_slice(owner_address_1)
+                        .store_slice(storage::team_address)
                         .store_coins(msg_value)
                         .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
         send_raw_message(msg.end_cell(), 0); 
         ;; builder msg2 = begin_cell()
         ;;                 .store_uint(0x10, 6)
-        ;;                 .store_slice(owner_address_2)
+        ;;                 .store_slice(storage::conversion_address)
         ;;                 .store_coins(msg_value)
         ;;                 .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
         ;; send_raw_message(msg2.end_cell(), 0); 
@@ -197,25 +229,25 @@ global slice storage::owner_address_2;
     ;; change something
     if (op == 10) {  ;; change creation fee
         throw_unless(exc::not_enough_ton_for_fees, msg_value > tons_for_notification);
-        notify_owner(owner_address_1, tons_for_notification, "Creation fee was changed");
-        save_all_data(staking_pool_code, nft_item_code, all_pools, in_msg_body~load_coins(), owner_address_1, owner_address_2);
+        notify_owner(storage::team_address, tons_for_notification, "Creation fee was changed");
+        save_all_data(staking_pool_code, nft_item_code, all_pools, in_msg_body~load_coins(), storage::team_address, storage::conversion_address);
 
         return ();
     }
     if (op == 11) {  ;; change staking_pool_code and nft_item_code
         throw_unless(exc::not_enough_ton_for_fees, msg_value > tons_for_notification);
-        notify_owner(owner_address_1, tons_for_notification, "Staking smc code was changed");
-        save_all_data(in_msg_body~load_ref(), in_msg_body~load_ref(), all_pools, creation_fee, owner_address_1, owner_address_2);
+        notify_owner(storage::team_address, tons_for_notification, "Staking smc code was changed");
+        save_all_data(in_msg_body~load_ref(), in_msg_body~load_ref(), all_pools, creation_fee, storage::team_address, storage::conversion_address);
 
         return ();
     }
-    if (op == 12) {  ;; change owner_address_1
-        save_all_data(staking_pool_code, nft_item_code, all_pools, creation_fee, in_msg_body~load_msg_addr(), owner_address_2);
+    if (op == 12) {  ;; change storage::team_address
+        save_all_data(staking_pool_code, nft_item_code, all_pools, creation_fee, in_msg_body~load_msg_addr(), storage::conversion_address);
 
         return ();
     }
-    if (op == 13) {  ;; change owner_address_2
-        save_all_data(staking_pool_code, nft_item_code, all_pools, creation_fee, owner_address_1, in_msg_body~load_msg_addr());
+    if (op == 13) {  ;; change storage::conversion_address
+        save_all_data(staking_pool_code, nft_item_code, all_pools, creation_fee, storage::team_address, in_msg_body~load_msg_addr());
 
         return ();
     }
