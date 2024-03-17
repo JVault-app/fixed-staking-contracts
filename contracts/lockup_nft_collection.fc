@@ -157,13 +157,13 @@ global slice storage::creator_address;
                 storage::wallet_rewards_changed = 1;
             } 
             elseifnot (equal_slices(sender_address, storage::rewards_wallet_address)) {
-                send_jettons(query_id, jetton_amount, from_address, sender_address, 0, 64);
+                send_jettons(query_id, jetton_amount, from_address, excess_address, sender_address, gas::jetton_transfer, 0, 1, null());
                 return ();
             }
             load_last_cell();
             int commissions = muldiv(jetton_amount, storage::commission_factor, commission_devider);
-            send_jettons(query_id, commissions, storage::admin_address, storage::rewards_wallet_address, gas_for_jetton_transfer, 0);
-
+            send_jettons(query_id, commissions, storage::admin_address, excess_address, storage::rewards_wallet_address, gas::jetton_transfer, 0, 1, null());
+       
             storage::reward_jettons += jetton_amount - commissions;
             save_data();
 
