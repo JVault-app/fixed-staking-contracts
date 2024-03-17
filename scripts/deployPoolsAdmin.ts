@@ -1,12 +1,15 @@
-import { Address, toNano } from 'ton-core';
+import { Address, toNano } from '@ton/core';
 import { PoolsAdmin } from '../wrappers/PoolsAdmin';
-import { compile, NetworkProvider } from '@ton-community/blueprint';
+import { compile, NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {
     const poolsAdmin = provider.open(PoolsAdmin.createFromConfig({
         stakingPoolCode: await compile("LockupNftCollection"),
         nftItemCode: await compile('NftItem'),
+        sharecomsCode: await compile('Sharecoms'),
+
         creationFee: 10000000000n,  // 10 TON
+        
         ownerAddress1: Address.parse("EQCovSj8c8Ik1I-RZt7dbIOEulYe-MfJ2SN5eMhxwfACvsM0") as Address,
         ownerAddress2: Address.parse("UQC228vvLVzjK4t7CUfRhlQuxJqfB5sJzAZNEilvbpY6CzZk") as Address
     }, await compile('PoolsAdmin')));

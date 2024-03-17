@@ -1,6 +1,6 @@
-import { Address, beginCell, toNano, Dictionary, DictionaryKeyTypes, DictionaryKey} from 'ton-core';
+import { Address, beginCell, toNano, Dictionary, DictionaryKeyTypes, DictionaryKey} from '@ton/core';
 import { NftCollection, buildNftCollectionContentCell } from '../wrappers/LockupNftCollection';
-import { compile, NetworkProvider } from '@ton-community/blueprint';
+import { compile, NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {
     let stakingParams = Dictionary.empty(Dictionary.Keys.Uint(32), Dictionary.Values.Uint(32));

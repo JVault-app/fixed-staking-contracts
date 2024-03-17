@@ -1,8 +1,7 @@
 #pragma version >=0.4.0;
 #include "imports/stdlib.fc";
-#include "imports/params.fc";
-#include "imports/op-codes.fc";
-#include "imports/exceptions.fc";
+#include "imports/constants.fc";
+#include "imports/utils.fc";
 
 
 const int gas_for_deploy = 120000000;  ;; 0.12    TON
@@ -11,27 +10,27 @@ const int min_withdrawable_amount = 100000000;  ;; 0.1 TON
 const int min_tons_for_storage = 50000000;  ;; 0.05 TON
 const int tons_for_notification = 5000000;
 
-;; (cell, int) load_data() {
-;;     var ds = get_data().begin_parse();
-;;     return (
-;;         ds~load_ref(),  ;; staking_pool_code
-;;         ds~load_coins(),  ;; creation_fee
-;;         ds~load_msg_addr(),  ;; owner_address_1
-;;         ds~load_msg_addr()  ;; owner_address_2
-;;         );  
-;; }
+global cell storage::all_pools;
+global cell storage::staking_pool_code;
+global cell storage::nft_item_code;
+global cell storage::sharecoms_code;
 
+global int storage::creation_fee;
 
-() save_all_data(cell staking_pool_code, cell nft_item_code,  cell all_pools, 
-             int creation_fee, slice owner_address_1, slice owner_address_2) impure {
+global slice storage::owner_address_1;
+global slice storage::owner_address_2;
 
+() save_all_data() impure {
     set_data(begin_cell()
-                .store_ref(all_pools)
-                .store_ref(staking_pool_code)
-                .store_ref(nft_item_code)
-                .store_coins(creation_fee)
-                .store_slice(owner_address_1)
-                .store_slice(owner_address_2)
+                .store_ref(storage::all_pools)
+                .store_ref(storage::staking_pool_code)
+                .store_ref(storage::nft_item_code)
+                .store_ref(storage::sharecoms_code)
+
+                .store_coins(storage::creation_fee)
+                
+                .store_slice(storage::owner_address_1)
+                .store_slice(storage::owner_address_2)
             .end_cell());
 }
 
@@ -66,17 +65,6 @@ const int tons_for_notification = 5000000;
     send_raw_message(msg.end_cell(), sending_mode);  
 }
 
-
-() notify_owner(slice owner_address, int msg_value,  slice msg) impure inline {
-    builder msg = begin_cell()
-            .store_uint(0x18, 6) 
-            .store_slice(owner_address)
-            .store_coins(msg_value)
-            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-            .store_uint(0, 32)
-            .store_slice(msg);
-    send_raw_message(msg.end_cell(), 0);
-}
 
 
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {

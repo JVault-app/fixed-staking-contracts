@@ -15,11 +15,9 @@
 -}
 #pragma version >=0.4.0;
 #include "imports/stdlib.fc";
-#include "imports/params.fc";
-#include "imports/op-codes.fc";
+#include "imports/constants.fc";
+#include "imports/utils.fc";
 
-
-int min_tons_for_storage() asm "50000000 PUSHINT"; ;; 0.05 TON
 
 ;;
 ;;  Storage
@@ -49,22 +47,6 @@ int min_tons_for_storage() asm "50000000 PUSHINT"; ;; 0.05 TON
             .store_ref(content)
             .end_cell()
     );
-}
-
-() send_msg(slice to_address, int amount, int op, int query_id, builder payload, int send_mode) impure inline {
-    var msg = begin_cell()
-        .store_uint(0x10, 6) ;; nobounce - int_msg_info$0 ihr_disabled:Bool bounce:Bool bounced:Bool src:MsgAddress -> 010000
-        .store_slice(to_address)
-        .store_coins(amount)
-        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-        .store_uint(op, 32)
-        .store_uint(query_id, 64);
-
-    if (~ builder_null?(payload)) {
-        msg = msg.store_builder(payload);
-    }
-
-    send_raw_message(msg.end_cell(), send_mode);
 }
 
 () transfer_ownership(int my_balance, int index, slice collection_address, slice owner_address, cell content,
@@ -175,6 +157,42 @@ int min_tons_for_storage() asm "50000000 PUSHINT"; ;; 0.05 TON
     }
     if (op == op::get_static_data) {
         send_msg(sender_address, 0, op::report_static_data, query_id, begin_cell().store_uint(index, 256).store_slice(collection_address), 64);  ;; carry all the remaining value of the inbound message
+        return ();
+    }
+
+    if (op == op::get_storage_data) {
+        int recipients_cnt = in_msg_body~load_uint(8);  ;; number of recipients
+        throw_unless(exc::int_out_of_range, recipients_cnt <= 128);  ;; can send only 128 messages due to gas limits
+
+        int computing_fees = recipients_cnt * 5400000 + 10000000;  ;; estimate gas consumed during the compute phase
+        int tons_for_one_msg = (msg_value - computing_fees) / recipients_cnt; 
+        throw_unless(exc::out_of_gas, tons_for_one_msg > gas::notification * 2); 
+
+        cell forward_payload = in_msg_body~load_ref();
+        cell recipients_dict = in_msg_body~load_dict();
+        
+        builder common = begin_cell()
+                            .store_coins(tons_for_one_msg)
+                            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                            .store_uint(op::report_storage_data, 32)
+                            .store_uint(query_id, 64)
+                            .store_slice(sender_address)
+                            .store_uint(now(), 32)
+                            .store_ref(get_data())
+                            .store_ref(forward_payload);  ;; common part of all messages
+                            
+        (int key, slice to_address, int success) = recipients_dict.udict_get_min?(8);
+        repeat(recipients_cnt) {
+            var msg = begin_cell()
+                        .store_uint(0x10, 6)
+                        .store_slice(to_address)
+                        .store_builder(common);
+
+            send_raw_message(msg.end_cell(), 0);
+            (key, to_address, success) = recipients_dict.udict_get_next?(8, key);
+            throw_unless(success, exc::incorrect_input);
+        }
+
         return ();
     }
 

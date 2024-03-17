@@ -1,10 +1,8 @@
 #pragma version >=0.4.0;
 #include "imports/stdlib.fc";
-#include "imports/params.fc";
-#include "imports/op-codes.fc";
-#include "imports/exceptions.fc";
+#include "imports/constants.fc";
+#include "imports/utils.fc";
 
-int is_null?(slice s) asm "ISNULL";
 
 const int gas_for_jetton_transfer = 80000000;  ;; 0.08 TON
 const int gas_for_nft_transfer = 50000000;  ;; 0.05 TON
@@ -20,9 +18,6 @@ const int staking_devider = 1000000000;
 
 
 global int storage::init?;
-global int storage::wallet_lock_changed;
-global int storage::wallet_rewards_changed;
-
 global int storage::next_item_index;
 global cell storage::nft_item_code;
 global cell storage::collection_content;
@@ -33,13 +28,16 @@ global slice storage::rewards_wallet_address;
 global cell storage::staking_params;
 global int storage::minimum_deposit;
 global int storage::commission_factor;
-
 global int storage::reward_jettons;
+global int storage::tvl;
+
+global int storage::wallet_lock_changed;
+global int storage::wallet_rewards_changed;
 
 global cell storage::last_cell;
+
 global slice storage::admin_address;
 global slice storage::creator_address;
-global int storage::tvl;
 
 
 () load_data() impure inline {
@@ -91,87 +89,6 @@ global int storage::tvl;
             .store_ref(storage::last_cell)
         .end_cell()
     );
-}
-
-
-cell calculate_nft_item_state_init(int item_index) {
-    cell data = begin_cell().store_uint(item_index, 64).store_slice(my_address()).end_cell();
-    return begin_cell().store_uint(0, 2).store_dict(storage::nft_item_code).store_dict(data).store_uint(0, 1).end_cell();
-}
-
-
-slice calculate_nft_item_address(int wc, cell state_init) {
-    return begin_cell()
-                .store_uint(4, 3)
-                .store_int(wc, 8)
-                .store_uint(cell_hash(state_init), 256)
-                .end_cell()
-            .begin_parse();
-}
-
-
-() deploy_nft_item(int item_index, cell nft_content) impure inline {
-    cell state_init = calculate_nft_item_state_init(item_index);
-    slice nft_address = calculate_nft_item_address(workchain(), state_init);
-    builder msg = begin_cell()
-                    .store_uint(0x18, 6)
-                    .store_slice(nft_address)
-                    .store_coins(0)
-                    .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
-                    .store_ref(state_init)
-                    .store_ref(nft_content);
-    send_raw_message(msg.end_cell(), 64); 
-}
-
-
-() send_jettons(int query_id, int jetton_amount, slice to_address, slice jetton_wallet_address, 
-                int msg_value, int sending_mode) impure inline {
-
-    builder msg = begin_cell()
-                .store_uint(0x10, 6) 
-                .store_slice(jetton_wallet_address)
-                .store_coins(msg_value)
-                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1)
-                .store_uint(1, 1)
-                .store_ref(
-                    begin_cell()
-                        .store_uint(op::transfer_jetton, 32)
-                        .store_uint(query_id, 64)
-                        .store_coins(jetton_amount)
-                        .store_slice(to_address)
-                        .store_slice(to_address)
-                        .store_uint(0, 1)
-                        .store_coins(1)
-                        .store_uint(0, 1)
-                    .end_cell()
-                );
-            
-    send_raw_message(msg.end_cell(), sending_mode);  
-}
-
-
-() send_nft(int query_id, slice nft_address, slice to_address, 
-            int rewards_claimed, int msg_value, int sending_mode) impure inline {
-
-    builder msg = begin_cell()
-                    .store_uint(0x18, 6)
-                    .store_slice(nft_address)
-                    .store_coins(msg_value)
-                    .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1)
-                    .store_uint(1, 1)
-                    .store_ref(
-                        begin_cell()
-                            .store_uint(op::transfer, 32)
-                            .store_uint(query_id, 64)
-                            .store_slice(to_address)
-                            .store_slice(to_address)
-                            .store_uint(0, 1)
-                            .store_coins(1)
-                            .store_coins(rewards_claimed)
-                        .end_cell()
-                    );
-
-    send_raw_message(msg.end_cell(), sending_mode); 
 }
 
 
@@ -310,6 +227,24 @@ slice calculate_nft_item_address(int wc, cell state_init) {
             save_data();
             return ();
         }
+    }
+
+    if (op == op::get_storage_data) {
+        slice to_address = in_msg_body~load_msg_addr();
+        var msg = begin_cell()
+                    .store_uint(0x10, 6)
+                    .store_slice(to_address)
+                    .store_coins(0)
+                    .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                    .store_uint(op::report_storage_data, 32)
+                    .store_uint(query_id, 64)
+                    .store_slice(sender_address)
+                    .store_uint(now(), 32)
+                    .store_ref(get_data())
+                    .store_slice(in_msg_body);
+
+        send_raw_message(msg.end_cell(), 64);
+        return ();
     }
 
     ;; NFT transfer notification

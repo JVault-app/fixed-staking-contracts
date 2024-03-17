@@ -1,4 +1,4 @@
-import { Address, beginCell, DictionaryValue } from "ton-core";
+import { Address, beginCell, DictionaryValue } from "@ton/core";
 
 export type CollectionMint = {
     amount: bigint;

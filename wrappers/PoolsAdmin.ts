@@ -1,7 +1,8 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
 
 export type PoolsAdminConfig = {
     stakingPoolCode: Cell;
+    sharecomsCode: Cell;
     nftItemCode: Cell;
     creationFee: bigint;
     ownerAddress1: Address;
@@ -13,7 +14,10 @@ export function poolsAdminConfigToCell(config: PoolsAdminConfig): Cell {
                 .storeRef(beginCell().endCell())
                 .storeRef(config.stakingPoolCode)
                 .storeRef(config.nftItemCode)
+                .storeRef(config.sharecomsCode)
+
                 .storeCoins(config.creationFee)
+                
                 .storeAddress(config.ownerAddress1)  // main owner
                 .storeAddress(config.ownerAddress2)  // address for distribution part of income to JVT holders
             .endCell();
